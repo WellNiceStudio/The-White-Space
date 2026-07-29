@@ -112,41 +112,51 @@
   }
   .tc-dpad {
     position: relative;
-    width: 72px;
-    height: 72px;
+    width: 108px;
+    height: 108px;
     pointer-events: auto;
   }
-  /* Direction bars: full opacity by default, dimmed to 50% while pressed
-     (JS toggles .active on press/release -- see bindTouchButton). Each
-     bar is its own element so it can be tinted independently. */
-  .tc-dir {
+  /* Each direction is its own real button: the visible, tappable shape
+     IS the rounded bar itself (scaled up to a comfortable button size),
+     not a small icon floating inside a separate invisible hit area.
+     Full opacity by default, dimmed to 50% while pressed (JS toggles
+     .active -- see bindTouchButton); each button dims independently. */
+  .tc-dir-btn {
     position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     -webkit-user-select: none;
     user-select: none;
     touch-action: none;
-    opacity: 1;
   }
-  .tc-dir.active {
+  .tc-dir {
+    width: 100%;
+    height: 100%;
+    opacity: 1;
+    pointer-events: none;
+  }
+  .tc-dir-btn.active .tc-dir {
     opacity: 0.5;
   }
-  .tc-dir.tc-left,
-  .tc-dir.tc-right {
-    width: 20px;
-    height: 5px;
+  .tc-dir-btn.tc-left,
+  .tc-dir-btn.tc-right {
+    width: 48px;
+    height: 20px;
     top: 50%;
     transform: translateY(-50%);
   }
-  .tc-dir.tc-up,
-  .tc-dir.tc-down {
-    width: 5px;
-    height: 20px;
+  .tc-dir-btn.tc-up,
+  .tc-dir-btn.tc-down {
+    width: 20px;
+    height: 48px;
     left: 50%;
     transform: translateX(-50%);
   }
-  .tc-dir.tc-left  { left: 0; }
-  .tc-dir.tc-right { right: 0; }
-  .tc-dir.tc-up    { top: 0; }
-  .tc-dir.tc-down  { bottom: 0; }
+  .tc-dir-btn.tc-left  { left: 0; }
+  .tc-dir-btn.tc-right { right: 0; }
+  .tc-dir-btn.tc-up    { top: 0; }
+  .tc-dir-btn.tc-down  { bottom: 0; }
   /* Run and Jump: two identical circular buttons, side by side, 16px
      apart. Each is a small stack -- the stroke ring stays at full
      opacity always, while the fill button dims to 50% while pressed. */
@@ -207,10 +217,10 @@
 
 <div id="touchControls">
   <div class="tc-dpad">
-    <img class="tc-dir tc-up" data-key="up" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDQgMTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjE2IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="up" draggable="false">
-    <img class="tc-dir tc-down" data-key="down" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDQgMTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjE2IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="down" draggable="false">
-    <img class="tc-dir tc-left" data-key="left" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iNCIgdmlld0JveD0iMCAwIDE2IDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSI0IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="left" draggable="false">
-    <img class="tc-dir tc-right" data-key="right" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iNCIgdmlld0JveD0iMCAwIDE2IDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSI0IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="right" draggable="false">
+    <div class="tc-dir-btn tc-up" data-key="up"><img class="tc-dir tc-up" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDQgMTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjE2IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="up" draggable="false"></div>
+    <div class="tc-dir-btn tc-down" data-key="down"><img class="tc-dir tc-down" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNCIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDQgMTYiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjE2IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="down" draggable="false"></div>
+    <div class="tc-dir-btn tc-left" data-key="left"><img class="tc-dir tc-left" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iNCIgdmlld0JveD0iMCAwIDE2IDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSI0IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="left" draggable="false"></div>
+    <div class="tc-dir-btn tc-right" data-key="right"><img class="tc-dir tc-right" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iNCIgdmlld0JveD0iMCAwIDE2IDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNiIgaGVpZ2h0PSI0IiByeD0iMiIgZmlsbD0iIzIxMjEyMSIvPgo8L3N2Zz4K" alt="right" draggable="false"></div>
   </div>
   <div class="tc-actions">
     <div class="tc-action-btn" data-key="space">
