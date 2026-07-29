@@ -101,7 +101,7 @@
     It'll only take five minutes.<br>
     Probably.
   </div>
-  <div class="prompt">PRESS ANY KEY TO BEGIN</div>
+  <div class="prompt">CLICK TO BEGIN</div>
 </div>
 
 <div id="hud">00:00:00</div>
@@ -134,7 +134,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
   // after uploading it somewhere), keydown events won't reach it at all
   // until the page/frame actually has focus. Grab focus as early as
   // possible, and again on the first click/tap anywhere on the page, so
-  // "press any key to begin" reliably works regardless of hosting context.
+  // "click to start" reliably works regardless of hosting context.
   // ---------------------------------------------------------------
   function grabFocus() {
     try { window.focus(); } catch (err) {}
