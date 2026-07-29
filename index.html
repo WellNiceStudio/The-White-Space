@@ -100,7 +100,7 @@
     left: 0;
     right: 0;
     bottom: 24px;
-    padding: 0 48px 0 40px; /* 40px reserved on the left for the d-pad, 48px on the right for the buttons */
+    padding: 0 96px 0 80px; /* 80px reserved on the left for the d-pad, 96px on the right for the buttons */
     box-sizing: border-box;
     z-index: 10;
     justify-content: space-between;
@@ -112,8 +112,8 @@
   }
   .tc-dpad {
     position: relative;
-    width: 148px;
-    height: 148px;
+    width: 184px;
+    height: 184px;
     pointer-events: auto;
   }
   /* Each direction is its own real button: a 56x56 invisible hit area
@@ -164,20 +164,20 @@
   .tc-dir-btn.tc-right { right: 0; }
   .tc-dir-btn.tc-up    { top: 0; }
   .tc-dir-btn.tc-down  { bottom: 0; }
-  /* Run and Jump: two identical circular buttons, side by side, 24px
+  /* Run and Jump: two identical circular buttons, side by side, 48px
      apart. Each is a small stack -- the stroke ring stays at full
      opacity always, while the fill button dims to 50% while pressed. */
   .tc-actions {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 24px;
+    gap: 48px;
     pointer-events: auto;
   }
   .tc-action-btn {
     position: relative;
-    width: 50px;
-    height: 50px;
+    width: 70px;
+    height: 70px;
     -webkit-user-select: none;
     user-select: none;
     touch-action: none;
@@ -195,8 +195,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 42px; /* matches button.svg's 20/24 ratio against the 50px stroke */
-    height: 42px;
+    width: 62px; /* matches button.svg's 20/24 ratio against the 70px stroke */
+    height: 62px;
     transform: translate(-50%, -50%);
     opacity: 1;
     pointer-events: none;
