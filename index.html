@@ -100,7 +100,7 @@
     left: 0;
     right: 0;
     bottom: 24px;
-    padding: 0 32px 0 24px; /* 24px reserved on the left for the d-pad, 32px on the right for the buttons */
+    padding: 0 48px 0 40px; /* 40px reserved on the left for the d-pad, 48px on the right for the buttons */
     box-sizing: border-box;
     z-index: 10;
     justify-content: space-between;
@@ -112,17 +112,20 @@
   }
   .tc-dpad {
     position: relative;
-    width: 108px;
-    height: 108px;
+    width: 148px;
+    height: 148px;
     pointer-events: auto;
   }
-  /* Each direction is its own real button: the visible, tappable shape
-     IS the rounded bar itself (scaled up to a comfortable button size),
-     not a small icon floating inside a separate invisible hit area.
+  /* Each direction is its own real button: a 56x56 invisible hit area
+     (generous tap target), with the visible rounded bar (56x28 or
+     28x56 depending on orientation) centered inside it -- the tappable
+     area is bigger than what you see, for comfortable mobile tapping.
      Full opacity by default, dimmed to 50% while pressed (JS toggles
      .active -- see bindTouchButton); each button dims independently. */
   .tc-dir-btn {
     position: absolute;
+    width: 56px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -131,25 +134,29 @@
     touch-action: none;
   }
   .tc-dir {
-    width: 100%;
-    height: 100%;
     opacity: 1;
     pointer-events: none;
   }
   .tc-dir-btn.active .tc-dir {
     opacity: 0.5;
   }
+  .tc-dir-btn.tc-left  .tc-dir,
+  .tc-dir-btn.tc-right .tc-dir {
+    width: 56px;
+    height: 28px;
+  }
+  .tc-dir-btn.tc-up  .tc-dir,
+  .tc-dir-btn.tc-down .tc-dir {
+    width: 28px;
+    height: 56px;
+  }
   .tc-dir-btn.tc-left,
   .tc-dir-btn.tc-right {
-    width: 48px;
-    height: 20px;
     top: 50%;
     transform: translateY(-50%);
   }
   .tc-dir-btn.tc-up,
   .tc-dir-btn.tc-down {
-    width: 20px;
-    height: 48px;
     left: 50%;
     transform: translateX(-50%);
   }
@@ -157,20 +164,20 @@
   .tc-dir-btn.tc-right { right: 0; }
   .tc-dir-btn.tc-up    { top: 0; }
   .tc-dir-btn.tc-down  { bottom: 0; }
-  /* Run and Jump: two identical circular buttons, side by side, 16px
+  /* Run and Jump: two identical circular buttons, side by side, 24px
      apart. Each is a small stack -- the stroke ring stays at full
      opacity always, while the fill button dims to 50% while pressed. */
   .tc-actions {
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 16px;
+    gap: 24px;
     pointer-events: auto;
   }
   .tc-action-btn {
     position: relative;
-    width: 42px;
-    height: 42px;
+    width: 50px;
+    height: 50px;
     -webkit-user-select: none;
     user-select: none;
     touch-action: none;
@@ -188,8 +195,8 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 35px; /* matches button.svg's 20/24 ratio against the 42px stroke */
-    height: 35px;
+    width: 42px; /* matches button.svg's 20/24 ratio against the 50px stroke */
+    height: 42px;
     transform: translate(-50%, -50%);
     opacity: 1;
     pointer-events: none;
