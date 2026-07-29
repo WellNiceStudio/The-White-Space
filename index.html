@@ -143,8 +143,10 @@
   .tc-btn.tc-up    { top: 0;   left: 50%; transform: translateX(-50%) rotate(90deg); }
   .tc-btn.tc-right { top: 50%; right: 0;  transform: translateY(-50%) rotate(180deg); }
   .tc-btn.tc-down  { bottom: 0; left: 50%; transform: translateX(-50%) rotate(270deg); }
-  /* Jump stacked above Run, both sharing one fixed-size box so their
-     heights line up regardless of each glyph's native aspect ratio. */
+  /* Jump stacked above Run. Height is fixed (not width) so both glyphs
+     render at the exact same visual scale -- letting width vary lets
+     Jump's naturally wider glyph keep its true proportions instead of
+     being squashed down to match Run's narrower one. */
   .tc-actions {
     display: flex;
     flex-direction: column;
@@ -153,8 +155,7 @@
     pointer-events: auto;
   }
   .tc-action-btn {
-    width: 62px;
-    height: 24px;
+    height: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -164,9 +165,9 @@
     opacity: 0.5;
   }
   .tc-action-btn img {
-    width: 100%;
     height: 100%;
-    object-fit: contain;
+    width: auto;
+    display: block;
     pointer-events: none;
   }
   /* Active-state feedback: JS toggles this class on press/release
@@ -335,6 +336,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     tripRollAccum: 0,
     tripPending: false, // RNG (or the idle vignette) has decided a trip will happen; waiting for a clean frame boundary
     tripHoldTimer: null, // set to 0 once the fall finishes; counts up to TRIP_LIE_HOLD_SEC before getting-up
+    frameHoldTimer: null, // generic mid-cycle animation pause (see IDLE_PHONE_HOLD_FRAME_INDEX); currently used only for idle_phone_south's 2s hold on its south12 frame
     // --- Idle vignette (south-facing, scripted): idle_south for a random
     // 2-5s, then walk_south for a random 3-20s, then a guaranteed fall,
     // then getting-up_south, then an UNCAPPED sad-walk_south loop that
@@ -352,6 +354,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     character.action = action;
     character.frameIndex = 0;
     character.frameTimer = 0;
+    character.frameHoldTimer = null; // never let a mid-cycle hold bleed into a new action
   }
 
   // Resets the "how long have I been standing still" clock, and rerolls
@@ -512,6 +515,13 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
   // lasts this long afterward before normal walk/idle resumes -- even if
   // Stefan is mid-stride or mid-idle when the window closes.
   const SAD_WALK_DURATION_SEC = 30;
+  // idle_phone_south holds an extra 2 seconds on its "south12" frame (index
+  // 10 of its 12 usable frames -- south1 was dropped earlier as a
+  // duplicate, so south2..south13 land at indices 0..11) before finishing
+  // out the rest of the loop. A deliberate scripted pause, not part of the
+  // per-frame fps timing; see frameHoldTimer in animate().
+  const IDLE_PHONE_HOLD_FRAME_INDEX = 10;
+  const IDLE_PHONE_HOLD_SEC = 2;
   // Tripping/falling only happens out of a walk cycle, never while running.
   const MOVING_ACTIONS = new Set([
     'walk_south', 'walk_east', 'walk_west',
@@ -741,6 +751,17 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
       return;
     }
 
+    // idle_phone_south's scripted 2s pause on its south12 frame (see
+    // IDLE_PHONE_HOLD_FRAME_INDEX) -- frozen there until the hold elapses,
+    // then the cycle continues on to its final frame as normal. Unlike
+    // tripHoldTimer, this does NOT lock out player input; setAction()
+    // clears it immediately if the player interrupts mid-hold.
+    if (character.frameHoldTimer !== null) {
+      character.frameHoldTimer += dt;
+      if (character.frameHoldTimer < IDLE_PHONE_HOLD_SEC) return;
+      character.frameHoldTimer = null;
+    }
+
     const cfg = ANIM_CONFIG[character.action];
     if (!cfg) return;
     const frames = ANIMS[character.action];
@@ -752,6 +773,10 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     if (character.frameTimer >= frameDuration) {
       character.frameTimer -= frameDuration;
       character.frameIndex++;
+
+      if (character.action === 'idle_phone_south' && character.frameIndex === IDLE_PHONE_HOLD_FRAME_INDEX) {
+        character.frameHoldTimer = 0;
+      }
 
       if (character.frameIndex >= frames.length) {
         if (cfg.loop) {
