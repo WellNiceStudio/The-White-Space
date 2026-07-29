@@ -22,6 +22,7 @@
     color: var(--ink);
     -webkit-user-select: none;
     user-select: none;
+    outline: none; /* body is focusable (tabindex) for reliable keyboard capture; hide the focus ring */
   }
   #gameCanvas {
     display: block;
@@ -91,7 +92,7 @@
   }
 </style>
 </head>
-<body>
+<body tabindex="0">
 
 <div id="startScreen">
   <div class="welcome-tag">Welcome to</div>
@@ -127,6 +128,22 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
   }
   window.addEventListener('resize', resize);
   resize();
+
+  // ---------------------------------------------------------------
+  // Keyboard focus safety net: if this page is embedded/iframed (e.g.
+  // after uploading it somewhere), keydown events won't reach it at all
+  // until the page/frame actually has focus. Grab focus as early as
+  // possible, and again on the first click/tap anywhere on the page, so
+  // "press any key to begin" reliably works regardless of hosting context.
+  // ---------------------------------------------------------------
+  function grabFocus() {
+    try { window.focus(); } catch (err) {}
+    try { document.body.focus(); } catch (err) {}
+  }
+  grabFocus();
+  window.addEventListener('load', grabFocus);
+  document.addEventListener('click', grabFocus);
+  document.addEventListener('touchstart', grabFocus);
 
   // ---------------------------------------------------------------
   // Load sprites into Image objects
@@ -211,13 +228,21 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     crouchHeld: false,
     stillTimer: 0,       // seconds spent standing still since last input (post-interaction only)
     idleThreshold: 1,    // reroll each time stillTimer resets (see resetStillTimer)
-    idleSouthTimer: 0,   // seconds spent actually playing idle_south; past 5s -> sad-walk_south
+    idleSouthTimer: 0,   // seconds spent actually playing idle_south; past idleWalkThreshold -> the idle vignette begins
     walkMood: 'walk',    // 'walk' | 'sad-walk' -- derived fresh every frame from sadWalkUntil, see maybeApplySadWalk
-    sadWalkUntil: -Infinity, // game-clock seconds; sad-walk (any direction) is only available while elapsedSec < this
+    sadWalkUntil: -Infinity, // game-clock seconds; EAST/WEST sad-walk (after a mishap) is only available while elapsedSec < this
     lastTripTime: -Infinity, // game-clock seconds of the last trip
     tripRollAccum: 0,
-    tripPending: false, // RNG has decided a trip will happen; waiting for a clean frame boundary
-    tripHoldTimer: null // set to 0 once the fall finishes; counts up to TRIP_LIE_HOLD_SEC before getting-up
+    tripPending: false, // RNG (or the idle vignette) has decided a trip will happen; waiting for a clean frame boundary
+    tripHoldTimer: null, // set to 0 once the fall finishes; counts up to TRIP_LIE_HOLD_SEC before getting-up
+    // --- Idle vignette (south-facing, scripted): idle_south for a random
+    // 2-5s, then walk_south for a random 3-20s, then a guaranteed fall,
+    // then getting-up_south, then an UNCAPPED sad-walk_south loop that
+    // only ends on real player input. See maybeTriggerTrip()/update().
+    idleWalkThreshold: 3.5, // rerolled (2-5s) each time a fresh idle stretch starts
+    inIdleVignette: false, // true from the moment the vignette's walk_south begins until real input
+    vignetteWalkTimer: 0,  // seconds spent in the vignette's walk_south so far
+    vignetteFallAt: 0      // rolled (3-20s) once the vignette's walk_south begins
   };
 
   let hasInteracted = false; // once true, walk_south never plays again
@@ -236,6 +261,18 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     character.stillTimer = 0;
     character.idleThreshold = 1 + Math.random();
     character.idleSouthTimer = 0;
+    character.idleWalkThreshold = 2 + Math.random() * 3; // 2-5s
+  }
+
+  // Cancels the idle vignette outright. Called only at real, player-driven
+  // interaction sites (crouch/jump/look-up/movement) -- NOT from inside
+  // the vignette's own scripted flow (startTrip(), or the automatic
+  // jump/getting-up completion), so the vignette isn't accidentally
+  // cancelled by its own fall/getting-up sequence. The fall/getting-up
+  // portion is separately non-interruptible anyway, since update() blocks
+  // all input while those actions are playing.
+  function endIdleVignette() {
+    character.inIdleVignette = false;
   }
 
   // ---------------------------------------------------------------
@@ -401,6 +438,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     if (character.crouchHeld) {
       // stay crouched while down is held; releasing triggers getting-up
       if (!keys.down) endCrouch();
+      endIdleVignette();
       resetStillTimer();
       return;
     }
@@ -427,6 +465,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
 
     if (keys.down) {
       hasInteracted = true;
+      endIdleVignette();
       startCrouch();
       resetStillTimer();
       return;
@@ -434,6 +473,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
 
     if (keys.space) {
       hasInteracted = true;
+      endIdleVignette();
       startJump();
       resetStillTimer();
       return;
@@ -443,6 +483,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
       // holds on look_up's last frame (frame 5) for as long as the
       // button stays down, then drops straight back to normal on release
       hasInteracted = true;
+      endIdleVignette();
       setAction('look_up_' + character.facing);
       resetStillTimer();
       return;
@@ -450,6 +491,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
 
     if (keys.left || keys.right) {
       hasInteracted = true;
+      endIdleVignette();
       character.facing = keys.left ? 'west' : 'east';
       const running = keys.shift;
 
@@ -476,13 +518,32 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
       return;
     }
 
-    // After the first interaction, walk_south is retired for good.
-    // Stand still, then idle_south once stillness passes idleThreshold
-    // (a random 1-2s), then -- after idle_south has been playing for a
-    // further 5s, and only within SAD_WALK_DURATION_SEC of a real
-    // trip/fall -- sad-walk_south takes over. Once that window closes,
-    // idling never escalates past idle_south, and any sad-walk_south
-    // already playing drops straight back to idle_south.
+    // After the first interaction, walk_south is retired as a plain
+    // "nothing is happening" state -- but a scripted idle vignette can
+    // bring it back: stand still, then idle_south once stillness passes
+    // idleThreshold (a random 1-2s), then -- after idle_south has been
+    // playing for a further random 2-5s -- the vignette kicks in: Stefan
+    // walks south again for a random 3-20s, then a guaranteed fall
+    // (falling_south -> getting-up_south, via the same shared mishap
+    // machinery used everywhere else), then settles into an UNCAPPED
+    // sad-walk_south loop that only ends on real player input.
+    if (character.inIdleVignette) {
+      if (character.action === 'walk_south') {
+        character.vignetteWalkTimer += dt;
+        if (character.vignetteWalkTimer >= character.vignetteFallAt && !character.tripPending) {
+          // force the same latch the generic mishap roll uses; the
+          // existing MOVING_ACTIONS/frame-1 cutover above (still south,
+          // so startTrip() always resolves to falling_south) does the rest.
+          character.tripPending = true;
+          character.lastTripTime = elapsedSec;
+        }
+      }
+      // while action is 'sad-walk_south' (or mid-fall/getting-up, which
+      // update() already returns early for at the top of this function),
+      // there's nothing else to do here -- just let it keep looping.
+      return;
+    }
+
     character.stillTimer += dt;
 
     if (character.stillTimer <= character.idleThreshold) {
@@ -491,8 +552,15 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
       if (character.action === 'idle_south') {
         character.idleSouthTimer += dt;
       }
-      const sadWalkActive = elapsedSec < character.sadWalkUntil;
-      setAction((character.idleSouthTimer >= 5 && sadWalkActive) ? 'sad-walk_south' : 'idle_south');
+      if (character.idleSouthTimer >= character.idleWalkThreshold) {
+        // kick off the idle vignette
+        character.inIdleVignette = true;
+        character.vignetteWalkTimer = 0;
+        character.vignetteFallAt = 3 + Math.random() * 17; // 3-20s
+        setAction('walk_south');
+      } else {
+        setAction('idle_south');
+      }
     }
   }
 
@@ -547,7 +615,12 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
             // cutting straight to getting-up
             character.tripHoldTimer = 0;
           } else if (isJumpAction(a) || a.indexOf('getting-up_') === 0) {
-            if (!hasInteracted) {
+            if (character.inIdleVignette && a === 'getting-up_south') {
+              // the idle vignette's scripted fall has resolved -- settle
+              // into the uncapped sad-walk_south loop (see update()),
+              // which only ends on real player input
+              setAction('sad-walk_south');
+            } else if (!hasInteracted) {
               setAction('walk_south');
             } else {
               resetStillTimer();
