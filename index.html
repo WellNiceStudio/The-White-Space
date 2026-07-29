@@ -327,6 +327,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     idleThreshold: 1,    // reroll each time stillTimer resets (see resetStillTimer)
     idleSouthTimer: 0,   // seconds spent actually playing idle_south/idle_phone_south; past idleWalkThreshold -> the idle vignette begins
     idleMood: 'idle_south', // 'idle_south' | 'idle_phone_south' -- rolled fresh each time a new idle session starts; interchangeable, identical rules
+    idlePhoneHoldPlayed: false, // true once idle_phone_south's frame_12 pause has fully played out this session; blocks the idle vignette from cutting away before/during it (see update()/animate())
     walkMood: 'walk',    // 'walk' | 'sad-walk' -- derived fresh every frame from sadWalkUntil, see maybeApplySadWalk
     sadWalkUntil: -Infinity, // game-clock seconds; EAST/WEST sad-walk (after a mishap) is only available while elapsedSec < this
     lastTripTime: -Infinity, // game-clock seconds of the last trip
@@ -362,6 +363,7 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
     character.idleThreshold = 1 + Math.random();
     character.idleSouthTimer = 0;
     character.idleWalkThreshold = 2 + Math.random() * 3; // 2-5s
+    character.idlePhoneHoldPlayed = false;
   }
 
   // Cancels the idle vignette outright. Called only at real, player-driven
@@ -707,8 +709,16 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
         // idle_phone_south (50/50, interchangeable, identical rules) and
         // hold that choice for the whole session
         character.idleMood = Math.random() < 0.5 ? 'idle_south' : 'idle_phone_south';
+        character.idlePhoneHoldPlayed = false;
       }
-      if (character.idleSouthTimer >= character.idleWalkThreshold) {
+      // idle_phone_south's frame_12 pause must always get to play out --
+      // the vignette's own (much shorter, 2-5s) timer would otherwise
+      // regularly cut the mood away before the pause is even reached, or
+      // interrupt it mid-hold. So while that mood is active, the vignette
+      // is held off until idlePhoneHoldPlayed flips true (see animate()),
+      // regardless of how idleSouthTimer compares to idleWalkThreshold.
+      const holdHasPlayedIfNeeded = character.idleMood !== 'idle_phone_south' || character.idlePhoneHoldPlayed;
+      if (character.idleSouthTimer >= character.idleWalkThreshold && holdHasPlayedIfNeeded) {
         // kick off the idle vignette
         character.inIdleVignette = true;
         character.vignetteWalkTimer = 0;
@@ -777,6 +787,16 @@ const SPRITES_RAW = {"getting-up_west": ["data:image/png;base64,iVBORw0KGgoAAAAN
       if (character.frameIndex >= frames.length) {
         if (cfg.loop) {
           character.frameIndex = 0;
+          if (character.action === 'idle_phone_south') {
+            // the pause has now fully played out AND frame_13 got its own
+            // full fps-duration on screen before looping -- only now is
+            // the idle vignette (see update()) allowed to escalate away
+            // from idle_phone_south, once its own timer also says it's
+            // time. Setting this any earlier (e.g. the instant the pause
+            // itself clears) would let the vignette preempt frame_13
+            // entirely, since update() runs before animate() each tick.
+            character.idlePhoneHoldPlayed = true;
+          }
         } else {
           character.frameIndex = frames.length - 1;
           const a = character.action;
