@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>The White Space</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -94,38 +94,57 @@
   /* ---------- Mobile touch controls ---------- */
   /* Hidden by default; JS adds .visible only on touch-capable devices,
      so desktop play is completely unaffected. */
+  /* Fully responsive layout: every size below derives from clamp()/vmin
+     so the controls scale smoothly between small phones and large
+     tablets instead of using fixed pixel values. vmin (the smaller of
+     viewport width/height) is used rather than vw so the controls stay
+     the same physical size whether the device is in portrait or
+     landscape -- vw alone would balloon in landscape since width grows
+     while thumb size doesn't. */
   #touchControls {
     display: none;
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 24px;
-    padding: 0 96px 0 80px; /* 80px reserved on the left for the d-pad, 96px on the right for the buttons */
+    bottom: 0;
+    /* Safe-area insets (notches/rounded corners) plus a comfortable
+       responsive margin on top, so controls never sit under a notch
+       or right at the physical screen edge on any device. */
+    padding-left: calc(env(safe-area-inset-left, 0px) + clamp(16px, 5vmin, 40px));
+    padding-right: calc(env(safe-area-inset-right, 0px) + clamp(16px, 5vmin, 40px));
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(12px, 4vmin, 28px));
     box-sizing: border-box;
     z-index: 10;
-    justify-content: space-between;
-    align-items: center; /* keeps the d-pad vertically centered against the button row */
+    justify-content: space-between; /* d-pad bottom-left, actions bottom-right */
+    align-items: flex-end;
     pointer-events: none; /* re-enabled on the individual controls below */
+    opacity: 0.92; /* sits gently into the minimalist scene rather than fighting the art */
   }
   #touchControls.visible {
     display: flex;
   }
   .tc-dpad {
+    /* Group target: roughly 15-20% of the viewport's shorter side on
+       typical phones/tablets (20vmin), floored at 120px so it's never
+       too small to use comfortably on the smallest phones, and capped
+       at 220px so it never dominates a large tablet screen. */
+    --dpad: clamp(120px, 20vmin, 220px);
     position: relative;
-    width: 184px;
-    height: 184px;
+    width: var(--dpad);
+    height: var(--dpad);
     pointer-events: auto;
   }
-  /* Each direction is its own real button: a 56x56 invisible hit area
-     (generous tap target), with the visible rounded bar (56x28 or
-     28x56 depending on orientation) centered inside it -- the tappable
-     area is bigger than what you see, for comfortable mobile tapping.
+  /* Each direction is its own real button: an invisible hit area sized
+     at ~30% of the d-pad (generous tap target), with the visible
+     rounded bar centered inside it -- the tappable area is bigger than
+     what you see, for comfortable mobile tapping. The hit-area-to-gap
+     ratio is preserved at every size since both scale off --dpad.
      Full opacity by default, dimmed to 50% while pressed (JS toggles
      .active -- see bindTouchButton); each button dims independently. */
   .tc-dir-btn {
     position: absolute;
-    width: 56px;
-    height: 56px;
+    width: calc(var(--dpad) * 0.304);
+    height: calc(var(--dpad) * 0.304);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -134,21 +153,29 @@
     touch-action: none;
   }
   .tc-dir {
+    display: block;
+    object-fit: contain; /* never stretched, whatever box it lands in */
     opacity: 1;
     pointer-events: none;
   }
   .tc-dir-btn.active .tc-dir {
     opacity: 0.5;
   }
+  /* aspect-ratio locks each bar to the source graphic's true 4:1
+     proportions (a 16x4 rounded rect) -- only one dimension is driven
+     by --dpad and the other follows automatically, so the art can
+     never be stretched or squashed at any screen size. */
   .tc-dir-btn.tc-left  .tc-dir,
   .tc-dir-btn.tc-right .tc-dir {
-    width: 56px;
-    height: 28px;
+    width: calc(var(--dpad) * 0.304);
+    height: auto;
+    aspect-ratio: 4 / 1;
   }
   .tc-dir-btn.tc-up  .tc-dir,
   .tc-dir-btn.tc-down .tc-dir {
-    width: 28px;
-    height: 56px;
+    height: calc(var(--dpad) * 0.304);
+    width: auto;
+    aspect-ratio: 1 / 4;
   }
   .tc-dir-btn.tc-left,
   .tc-dir-btn.tc-right {
@@ -164,20 +191,23 @@
   .tc-dir-btn.tc-right { right: 0; }
   .tc-dir-btn.tc-up    { top: 0; }
   .tc-dir-btn.tc-down  { bottom: 0; }
-  /* Run and Jump: two identical circular buttons, side by side, 48px
-     apart. Each is a small stack -- the stroke ring stays at full
-     opacity always, while the fill button dims to 50% while pressed. */
+  /* Run and Jump: two identical circular buttons, side by side, with
+     spacing that scales with button size so they never feel cramped
+     enough to risk an accidental press. Each is a small stack -- the
+     stroke ring stays at full opacity always, while the fill button
+     dims to 50% while pressed. */
   .tc-actions {
+    --action: clamp(44px, 9vmin, 72px);
     display: flex;
     flex-direction: row;
     align-items: center;
-    gap: 48px;
+    gap: calc(var(--action) * 0.5);
     pointer-events: auto;
   }
   .tc-action-btn {
     position: relative;
-    width: 50px;
-    height: 50px;
+    width: var(--action);
+    height: var(--action);
     -webkit-user-select: none;
     user-select: none;
     touch-action: none;
@@ -188,6 +218,8 @@
     left: 0;
     width: 100%;
     height: 100%;
+    aspect-ratio: 1 / 1; /* button-stroke.svg is a true circle -- never stretched */
+    object-fit: contain;
     opacity: 1; /* always full opacity, regardless of press state */
     pointer-events: none;
   }
@@ -195,8 +227,10 @@
     position: absolute;
     top: 50%;
     left: 50%;
-    width: 42px; /* matches button.svg's 20/24 ratio against the 50px stroke */
-    height: 42px;
+    width: calc(var(--action) * 0.84); /* matches button.svg's 20/24 ratio against the stroke */
+    height: calc(var(--action) * 0.84);
+    aspect-ratio: 1 / 1; /* button.svg is a true circle -- never stretched */
+    object-fit: contain;
     transform: translate(-50%, -50%);
     opacity: 1;
     pointer-events: none;
