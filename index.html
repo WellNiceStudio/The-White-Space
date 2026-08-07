@@ -464,7 +464,7 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
     running_jump_east:    { fps: 16, loop: false },
     running_jump_west:    { fps: 16, loop: false },
     look_up_east:         { fps: 10, loop: false },
-    look_up_west:         { fps: 10, loop: false }
+    look_up_west:         { fps: 10, loop: false },
   };
 
   // West-facing art: every single east/west pair in this game turned out,
@@ -537,6 +537,29 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // that actually move character.x (south walk/run is stationary).
   function isMovingEastWest(action) {
     return isWalkOrRunAction(action) && !action.endsWith('_south');
+  }
+
+  // The whole visible world is exactly one canvas.width-wide loop that
+  // wraps seamlessly at both edges -- walking far enough off the right
+  // side brings you back in on the left, and vice versa (see
+  // character.x's own wrap in animate()'s isMovingEastWest block, which
+  // already did this for Stefan's sprite alone). character.worldX itself
+  // stays monotonic and never wraps (it's still the "real" cumulative
+  // distance travelled, used elsewhere for e.g. pacing), so anything
+  // positioned by its own worldX (doors) needs its distance FROM
+  // Stefan computed as the shortest signed path around the loop rather
+  // than a raw subtraction -- otherwise it'd not just fail to shrink as
+  // Stefan approaches from "the other way round", it would grow without
+  // bound the longer Stefan keeps walking in one direction, since worldX
+  // itself never resets. Always returns a value in (-canvas.width/2,
+  // canvas.width/2] -- the longest anything can ever be from Stefan, in
+  // wrapped terms, is exactly half the loop.
+  function wrappedOffset(itemWorldX, fromWorldX) {
+    const loopLen = canvas.width;
+    let diff = (itemWorldX - fromWorldX) % loopLen;
+    if (diff > loopLen / 2) diff -= loopLen;
+    else if (diff <= -loopLen / 2) diff += loopLen;
+    return diff;
   }
 
   function isJumpAction(action) {
@@ -645,22 +668,23 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // up -- note this is the NEGATION of the yOff/fallSkyY values it's
   // computed from, since those use canvas y convention where negative
   // means up).
-  function drawGroundShadow(x, heightAboveGround) {
+  function drawGroundShadow(x, heightAboveGround, size) {
+    size = size || DISPLAY_SIZE; // optional -- defaults to Stefan's own DISPLAY_SIZE
     const t = Math.max(0, Math.min(1, heightAboveGround / SHADOW_HEIGHT_REF));
     const scale = 1 - t * (1 - SHADOW_MIN_SCALE);
     const alphaMul = 1 - t * (1 - SHADOW_MIN_ALPHA_MUL);
     const groundY = canvas.height * 0.62;
-    const shadowCy = groundY + DISPLAY_SIZE * SHADOW_Y_FRAC;
+    const shadowCy = groundY + size * SHADOW_Y_FRAC;
     ctx.save();
     ctx.fillStyle = SHADOW_OUTER_COLOR;
     ctx.globalAlpha = SHADOW_OUTER_ALPHA * alphaMul;
     ctx.beginPath();
-    ctx.ellipse(x, shadowCy, DISPLAY_SIZE * SHADOW_OUTER_RX_FRAC * scale, DISPLAY_SIZE * SHADOW_OUTER_RY_FRAC * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, shadowCy, size * SHADOW_OUTER_RX_FRAC * scale, size * SHADOW_OUTER_RY_FRAC * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = SHADOW_INNER_COLOR;
     ctx.globalAlpha = SHADOW_INNER_ALPHA * alphaMul;
     ctx.beginPath();
-    ctx.ellipse(x, shadowCy, DISPLAY_SIZE * SHADOW_INNER_RX_FRAC * scale, DISPLAY_SIZE * SHADOW_INNER_RY_FRAC * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, shadowCy, size * SHADOW_INNER_RX_FRAC * scale, size * SHADOW_INNER_RY_FRAC * scale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -814,37 +838,46 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // Door encounter: an entirely separate, later, in-game door event --
   // not to be confused with the sky-fall intro above, which just reuses
   // this event's fall/land/getting-up art and timing (see
-  // stepFallSequence()) without any door involved. The world
-  // is carved into fixed canvas.width-wide "screens", in worldX terms
-  // (see the character.worldX comment above) -- screen 0 is wherever
-  // Stefan starts, and doesn't itself count as "reached". As he walks
-  // east or west and crosses into screens he's never visited before,
-  // those first-time crossings are counted (registerScreenReached() /
-  // onNewScreenReached() below, called from animate()); the
-  // nextDoorTargetCount-th brand-new screen he ever reaches -- counting
-  // both directions together as one running total -- gets a door, fixed
-  // at that screen's centre, for as long as it exists.
+  // stepFallSequence()) without any door involved.
+  //
+  // The whole world is a single canvas.width-wide loop that wraps
+  // seamlessly at both edges (see wrappedOffset()'s comment and
+  // character.worldX above) -- there's no longer any notion of distinct
+  // "screens" to carve the world into or a fixed slot for a door to sit
+  // in. Instead, registerScreenReached()/onNewScreenReached() below (kept
+  // under their original names, still called from animate() every time
+  // Stefan crosses a canvas.width-wide lap boundary in either direction --
+  // there's just nothing "new" about any particular one any more, since
+  // it's the same single loop every time round) tick newScreensReachedCount
+  // up by one per lap boundary crossed, purely as a pacing clock; once it
+  // reaches nextDoorTargetCount, a fresh door is placed at a random spot
+  // somewhere around the loop, offset (at least DOOR_SPAWN_MIN_GAP away,
+  // so it never fades in right on top of him) from wherever Stefan
+  // actually is at that instant, in a random direction -- see
+  // onNewScreenReached() for the exact formula.
   //
   // This is a RECURRING mechanic: only one door exists in the world at a
   // time, but once it's used (see the 'fading' case below, where door is
   // nulled out), nextDoorTargetCount is re-rolled to wherever exploration
   // has reached by then plus another random DOOR_SPACING_MIN..
   // DOOR_SPACING_MAX, so the next one is always spaced at least
-  // DOOR_SPACING_MIN brand-new screens past the last one that was used --
-  // never too soon, never at a fixed predictable interval either. While a
-  // door already exists in the world (spawned but not yet used, even if
-  // Stefan has walked well past it and moved on), no new one appears.
+  // DOOR_SPACING_MIN lap-boundary crossings past the last one that was
+  // used -- never too soon, never at a fixed predictable interval either.
+  // While a door already exists in the world (spawned but not yet used,
+  // even if Stefan has walked well past it and moved on), no new one
+  // appears.
   //
-  // This satisfies "must not appear or disappear while on screen": a
-  // screen's door is only ever decided the instant Stefan first crosses
-  // into it, and is only ever actually drawn while he's on that screen or
-  // the one right next to it (see isDoorVisible()) -- so it scrolls
-  // smoothly into view from the edge as he approaches, never pops while
-  // already visible, and is simply not rendered at all while he's still
-  // far off (avoiding any flicker from his own unrelated screen-wrap
-  // illusion -- see doorScreenX()'s comment). Once decided, walking
-  // further past it leaves it exactly where it is, and walking back later
-  // scrolls it back into view exactly the same way.
+  // Because the loop's circumference is exactly one screen-width, ANY
+  // point in it is, at most, half a screen away from Stefan by the
+  // shorter wrapped path (see wrappedOffset()) -- so once a door exists
+  // there's no meaningful "too far away to be worth rendering" state left
+  // to gate on the way the old per-screen model needed to (isDoorVisible()
+  // below is now trivially true whenever a door exists). A freshly spawned
+  // door appears at full opacity immediately -- no fade-in -- wherever
+  // around the loop it happens to land. Once it exists it never moves or
+  // gets replaced; walking past it leaves it exactly where it is, and
+  // coming back around the loop scrolls it back into view exactly the same
+  // way (doorScreenX() below).
   //
   // Standing in front of it (within DOOR_INTERACT_RANGE, by worldX or by
   // on-screen position -- see the keys.up handler below) and pressing up
@@ -905,39 +938,43 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // fully transparent and fades IN first (see 'reentry_appear') before it
   // opens for Stefan to step out of. Always drawn dead centre on screen
   // (see render()), and entirely separate from the persistent world
-  // `door` above: it never touches doorScreenIndex/isDoorVisible()/
-  // onNewScreenReached(), so it can never be mistaken for -- or interfere
-  // with the spacing of -- the actual recurring exploration door.
+  // `door` above: it never touches isDoorVisible()/onNewScreenReached(), so
+  // it can never be mistaken for -- or interfere with the spacing of --
+  // the actual recurring exploration door.
   let reentryDoor = null;
 
-  // Screen tracking: minScreenReached/maxScreenReached mark the contiguous
-  // range of canvas.width-wide screens (in worldX) Stefan has ever visited
-  // -- both start at 0, his home screen, which doesn't count as "reached".
-  // Each time he crosses outside that range, in either direction,
-  // newScreensReachedCount ticks up by one per brand-new screen.
-  let minScreenReached = 0;
-  let maxScreenReached = 0;
+  // Lap tracking: lastLapIndex is Math.floor(character.worldX / canvas.width)
+  // as of the last check -- with the world now a single wraparound loop
+  // there's no more "already visited" vs "brand new" territory (it's the
+  // same one loop every time round), so unlike the old minScreenReached/
+  // maxScreenReached pair this simply tracks the last lap-boundary crossed,
+  // in either direction, purely so registerScreenReached() (below) can
+  // detect crossing a fresh one. newScreensReachedCount keeps its original
+  // name (plenty of other code and tests already key off it) but is now
+  // just a running lap-boundary-crossings pacing clock -- it ticks up by
+  // one every time Stefan crosses a canvas.width boundary at all, whether
+  // he's crossed that exact one before or not.
+  let lastLapIndex = 0;
   let newScreensReachedCount = 0;
-  let doorScreenIndex = null; // which screen index the CURRENT door is on, while one exists; null whenever there isn't one (including between doors)
 
-  const DOOR_SPACING_MIN = 4;  // a new door never appears before at least this many brand-new screens have been reached since the last one was used, so they don't show up too soon/too often -- same range as the cloud (CLOUD_SPACING_MIN/MAX below), so the two feel evenly matched rather than one being noticeably more common
+  const DOOR_SPACING_MIN = 4;  // a new door never appears before at least this many lap boundaries have been crossed since the last one was used, so they don't show up too soon/too often -- same range as the cloud (CLOUD_SPACING_MIN/MAX below), so the two feel evenly matched rather than one being noticeably more common
   const DOOR_SPACING_MAX = 14; // ...nor implausibly rarely -- each door's target is re-rolled within this range once the previous one is used
   // nextDoorTargetCount: the newScreensReachedCount value that triggers the
   // next door. Recurring -- once a door is used (see the 'fading' case in
   // doorEventUpdate() below, where door is nulled out), this is re-rolled
   // to newScreensReachedCount (wherever exploration has reached by then)
   // plus another DOOR_SPACING_MIN..DOOR_SPACING_MAX, so consecutive doors
-  // are always spaced at least DOOR_SPACING_MIN new screens apart. The very
-  // first door uses the same formula measured from the start (0).
+  // are always spaced at least DOOR_SPACING_MIN lap boundaries apart. The
+  // very first door uses the same formula measured from the start (0).
   let nextDoorTargetCount = DOOR_SPACING_MIN + Math.floor(Math.random() * (DOOR_SPACING_MAX - DOOR_SPACING_MIN + 1));
 
   const DOOR_Y_OFFSET = -15;       // nudges the door artwork up a few pixels relative to Stefan's usual ground alignment
   const DOOR_OPEN_FPS = 10;        // door_open frames 0-8 = opening half, 8-16 = closing half of the 17-frame closed->open->closed cycle
   const DOOR_OPEN_PEAK_FRAME = 8;  // fully-open frame (the cycle's midpoint)
   const DOOR_CLOSE_END_FRAME = 16; // last frame -- fully closed again
-  const DOOR_FADE_SEC = 1.2;       // door opacity fades to 0 once fully shut again, before either re-entry branch begins -- also reused as the new reentryDoor's fade-IN duration on the walkthrough branch (see 'reentry_appear'), so both fades read at the same speed
-  const DOOR_INTERACT_RANGE = 50;       // how close (in worldX) Stefan needs to be to the door to interact
-  const DOOR_VISIBLE_SCREEN_RADIUS = 1; // the door is only ever rendered while Stefan is standing on its screen or an adjacent one -- see isDoorVisible()
+  const DOOR_FADE_SEC = 1.2;       // door opacity fades to 0 once fully shut again, before either re-entry branch begins -- also reused as the new reentryDoor's fade-IN duration on the walkthrough branch (see 'reentry_appear'). The freshly-spawned world door itself no longer fades in -- it appears at full opacity immediately (see onNewScreenReached()).
+  const DOOR_INTERACT_RANGE = 50;       // how close (in worldX, wrapped) Stefan needs to be to the door to interact
+  const DOOR_SPAWN_MIN_GAP = 150;       // a freshly spawned door is always placed at least this many world-units away from wherever Stefan currently is (in wrapped terms), so it never appears right on top of him
   const DOOR_EVENT_FALL_SEC = 1.0;         // duration of the sky-fall descent
   const DOOR_EVENT_LANDING_HOLD_SEC = 1.0; // how long he stays down after hard_landing finishes, before getting up
 
@@ -1095,23 +1132,18 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
     }
   }
 
-  // Whether the door should be rendered at all right now. The door can be
-  // assigned many screens away from wherever Stefan currently is, and
-  // doorScreenX() (below) glides continuously toward canvas.width/2 the
-  // whole time regardless of true distance -- drawn unconditionally, it
-  // would spend a long stretch of real walking time sitting somewhere in
-  // the middle of the screen looking "reachable" while Stefan is actually
-  // still screens away (and, since his own sprite wraps independently of
-  // this glide, disconnected from whatever his sprite is visibly doing).
-  // Restricting rendering to when Stefan is actually on the door's screen
-  // or the one right next to it keeps the visible glide short and
-  // genuinely tied to his real approach -- it scrolls in from the edge
-  // just before he arrives and reads as one connected motion, not a
-  // slow drift that starts screens too early.
+  // Whether the door should be rendered at all right now. Under the old
+  // infinite-corridor-of-screens model this gated out doors that were
+  // still many screens away; now that the whole world is a single
+  // canvas.width loop, wrappedOffset() guarantees the door is NEVER more
+  // than half a screen from Stefan by the shorter path, so there's no
+  // "too far to bother drawing" state left to gate on -- trivially true
+  // whenever a door exists. (Kept as its own function, rather than inlined
+  // at each call site, since render() and the keys.up interact check both
+  // still read it, and it's one clear place to point at if that ever
+  // needs to change again.)
   function isDoorVisible() {
-    if (door === null) return false;
-    const currentScreen = Math.floor(character.worldX / canvas.width);
-    return Math.abs(currentScreen - doorScreenIndex) <= DOOR_VISIBLE_SCREEN_RADIUS;
+    return door !== null;
   }
 
   // Where the door currently sits on screen. This deliberately does NOT
@@ -1127,50 +1159,53 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // canvas.width/2 here isn't a claim that Stefan is always rendered at
   // screen centre (he isn't -- his own sprite wraps independently, see
   // animate()'s isMovingEastWest block); it's just the reference point the
-  // door glides toward as the true remaining worldX gap shrinks, and past,
-  // once the gap goes negative. isDoorVisible() (below) is what keeps this
-  // from reading as disconnected or jumpy: the door is only ever actually
-  // drawn while Stefan is genuinely near it (on its screen or the one next
-  // to it), a short enough window that this glide reads as one continuous,
-  // connected approach rather than a separate, far-off drift.
+  // door glides toward as the true remaining gap shrinks, and past, once
+  // the gap goes negative. wrappedOffset() (not a raw subtraction) is what
+  // makes that gap correct now that the world wraps -- the door always
+  // glides in from whichever side is actually shorter, rather than one
+  // fixed direction.
   function doorScreenX() {
-    return canvas.width / 2 + (door.worldX - character.worldX);
+    return canvas.width / 2 + wrappedOffset(door.worldX, character.worldX);
   }
 
-  // Call whenever character.worldX has just moved -- detects crossing
-  // into a screen Stefan has never reached before (in either direction)
-  // and registers it. Movement is continuous, so the reached range is
-  // always contiguous around screen 0; the while loops just guard against
-  // a single large step ever skipping more than one screen boundary.
+  // Call whenever character.worldX has just moved -- detects crossing a
+  // canvas.width lap boundary, in either direction, and registers it.
+  // Movement is continuous, so the while loop just guards against a single
+  // large step ever skipping more than one boundary in one call.
   function registerScreenReached() {
     const idx = Math.floor(character.worldX / canvas.width);
-    while (idx > maxScreenReached) {
-      maxScreenReached++;
-      onNewScreenReached(maxScreenReached);
+    while (idx > lastLapIndex) {
+      lastLapIndex++;
+      onNewScreenReached();
     }
-    while (idx < minScreenReached) {
-      minScreenReached--;
-      onNewScreenReached(minScreenReached);
+    while (idx < lastLapIndex) {
+      lastLapIndex--;
+      onNewScreenReached();
     }
   }
 
-  function onNewScreenReached(screenIndex) {
+  function onNewScreenReached() {
     newScreensReachedCount++;
     // door === null too: while a door already exists somewhere in the
     // world (spawned but not yet used, even if Stefan has since walked
     // well past it), no new one appears -- only one at a time. cloudPhase
     // === null too: no doors while the cloud is around (see the cloud
-    // comment block above). Uses >= rather than === for the count check
-    // (unlike the plain single-target comparison this used before
-    // cloudPhase became a possible blocker) so that if the target count
-    // is reached while a cloud happens to be active, the door isn't
-    // silently skipped forever once newScreensReachedCount ticks past
-    // it -- it just fires on the very next new screen once the cloud
-    // clears, still gated by door/doorScreenIndex being null the same as
-    // always.
-    if (door === null && doorScreenIndex === null && cloudPhase === null && newScreensReachedCount >= nextDoorTargetCount) {
-      doorScreenIndex = screenIndex;
-      door = { worldX: screenIndex * canvas.width + canvas.width / 2, frameIndex: 0, opacity: 1 };
+    // comment block above). Uses >= rather than === for the count check so
+    // that if the target count is reached while a cloud happens to be
+    // active, the door isn't silently skipped forever once
+    // newScreensReachedCount ticks past it -- it just fires on the very
+    // next lap boundary once whatever's blocking it clears, still gated
+    // by door being null the same as always.
+    if (door === null && cloudPhase === null && newScreensReachedCount >= nextDoorTargetCount) {
+      // Placed at a random spot around the loop, at least DOOR_SPAWN_MIN_GAP
+      // away from wherever Stefan is right now (so it never appears right
+      // on top of him) and at most half the loop away (the farthest
+      // anything can ever be in wrapped terms), in a random direction.
+      // Appears at full opacity immediately -- no fade-in.
+      const maxGap = Math.max(DOOR_SPAWN_MIN_GAP + 1, canvas.width / 2);
+      const gapMag = DOOR_SPAWN_MIN_GAP + Math.random() * (maxGap - DOOR_SPAWN_MIN_GAP);
+      const sign = Math.random() < 0.5 ? 1 : -1;
+      door = { worldX: character.worldX + sign * gapMag, frameIndex: 0, opacity: 1 };
     }
     // Same recurring idea as the door, just for the cloud -- see the
     // cloud comment block above for the full mutual-exclusion rationale.
@@ -1286,12 +1321,11 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
         door.frameIndex = DOOR_CLOSE_END_FRAME;
         door.opacity = Math.max(0, 1 - doorEventTimer / DOOR_FADE_SEC);
         if (doorEventTimer >= DOOR_FADE_SEC) {
-          door = null; // done with the original door entirely, same for both branches
-          doorScreenIndex = null; // frees up onNewScreenReached() to place another one later
+          door = null; // done with the original door entirely, same for both branches -- frees up onNewScreenReached() to place another one later
           // Recurring: the next door's target is re-rolled from wherever
           // exploration has reached right now, plus another
           // DOOR_SPACING_MIN..DOOR_SPACING_MAX -- so it's always at least
-          // DOOR_SPACING_MIN brand-new screens past this one, however far
+          // DOOR_SPACING_MIN lap boundaries past this one, however far
           // Stefan wanders in the meantime.
           nextDoorTargetCount = newScreensReachedCount + DOOR_SPACING_MIN + Math.floor(Math.random() * (DOOR_SPACING_MAX - DOOR_SPACING_MIN + 1));
           doorEventTimer = 0;
@@ -1923,8 +1957,10 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
       // elsewhere on screen. Either condition being true is what the
       // player would reasonably expect to work, so both are accepted.
       // isDoorVisible() guards both: it isn't fair to "screen-align" with
-      // a door that isn't even being drawn yet.
-      const worldClose = door !== null && Math.abs(character.worldX - door.worldX) <= DOOR_INTERACT_RANGE;
+      // a door that isn't even being drawn yet. worldClose uses
+      // wrappedOffset() (not a raw subtraction) so "true distance" is
+      // still correct now that the world wraps -- see its comment.
+      const worldClose = door !== null && Math.abs(wrappedOffset(door.worldX, character.worldX)) <= DOOR_INTERACT_RANGE;
       const screenClose = door !== null && isDoorVisible() && Math.abs(character.x - doorScreenX()) <= DOOR_INTERACT_RANGE;
       if (door !== null && (worldClose || screenClose)) {
         hasInteracted = true;
@@ -2285,15 +2321,35 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // aliasing loop right after ANIM_CONFIG above): they reuse the matching
   // "_east" Image objects and are simply flipped on the way to the canvas
   // instead.
-  function drawCharacterFrame(img, x, y, flip) {
+  function drawCharacterFrame(img, x, y, flip, size) {
+    size = size || DISPLAY_SIZE; // optional -- defaults to Stefan's own DISPLAY_SIZE
     if (flip) {
       ctx.save();
-      ctx.translate(x + DISPLAY_SIZE, y);
+      ctx.translate(x + size, y);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, 0, 0, DISPLAY_SIZE, DISPLAY_SIZE);
+      ctx.drawImage(img, 0, 0, size, size);
       ctx.restore();
     } else {
-      ctx.drawImage(img, x, y, DISPLAY_SIZE, DISPLAY_SIZE);
+      ctx.drawImage(img, x, y, size, size);
+    }
+  }
+
+  // Stefan's own draw call, factored out of render().
+  function drawStefanCharacter(groundY) {
+    const frames = ANIMS[character.action];
+    // yOff is negative while above ground (canvas y convention), so the
+    // shadow's height-above-ground input is its negation -- see
+    // drawGroundShadow()'s comment for how that drives its shrink/fade.
+    const yOff = jumpYOffset(frames) + character.fallSkyY;
+    drawGroundShadow(character.x, -yOff);
+
+    if (frames && frames.length) {
+      const img = frames[character.frameIndex];
+      const drawY = groundY - DISPLAY_SIZE / 2 + yOff;
+
+      if (img.complete && img.naturalWidth > 0) {
+        drawCharacterFrame(img, character.x - DISPLAY_SIZE / 2, drawY, character.action.endsWith('_west'));
+      }
     }
   }
 
@@ -2311,14 +2367,19 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
     // Door encounter: the random door itself (behind Stefan), and Stefan
     // is hidden entirely once he's "gone" through it (closing/fading) --
     // he reappears again once the sky-fall starts (or, on the walkthrough
-    // branch, once the NEW reentryDoor below finishes opening). Only
-    // actually drawn while isDoorVisible() -- see its comment for why.
+    // branch, once the NEW reentryDoor below finishes opening). Guarded by
+    // isDoorVisible() too (trivially true whenever door isn't null under
+    // the single-loop model -- see its comment) mainly so render() reads
+    // the same way it always has; door.opacity itself (checked just below)
+    // still gates the draw so a door mid-closing-fade during a door event
+    // doesn't render at 0 alpha for nothing -- a freshly spawned door,
+    // though, is simply at opacity 1 from the instant it exists.
     if (door !== null && isDoorVisible()) {
       const doorFrames = ANIMS['door_open'];
       if (doorFrames && doorFrames.length && door.opacity > 0) {
         const doorImg = doorFrames[door.frameIndex];
         if (doorImg && doorImg.complete && doorImg.naturalWidth > 0) {
-          const dsx = doorScreenX(); // world-space position projected to screen -- see doorScreenX() comment
+          const dsx = doorScreenX(); // world-space position projected to screen, wrapped around the loop -- see doorScreenX() comment
           ctx.save();
           ctx.globalAlpha = door.opacity;
           ctx.drawImage(doorImg, dsx - DISPLAY_SIZE / 2, groundY - DISPLAY_SIZE / 2 + DOOR_Y_OFFSET, DISPLAY_SIZE, DISPLAY_SIZE);
@@ -2360,23 +2421,10 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
     // this and the door art above.
     drawCloud();
 
-    if (!characterHiddenByDoorEvent) {
-      const frames = ANIMS[character.action];
-      // yOff is negative while above ground (canvas y convention), so the
-      // shadow's height-above-ground input is its negation -- see
-      // drawGroundShadow()'s comment for how that drives its shrink/fade.
-      const yOff = jumpYOffset(frames) + character.fallSkyY;
-      drawGroundShadow(character.x, -yOff);
-
-      if (frames && frames.length) {
-        const img = frames[character.frameIndex];
-        const drawY = groundY - DISPLAY_SIZE / 2 + yOff;
-
-        if (img.complete && img.naturalWidth > 0) {
-          drawCharacterFrame(img, character.x - DISPLAY_SIZE / 2, drawY, character.action.endsWith('_west'));
-        }
-      }
-    }
+    // Stefan -- hidden while gone through the door (see
+    // characterHiddenByDoorEvent above).
+    const stefanVisible = !characterHiddenByDoorEvent;
+    if (stefanVisible) drawStefanCharacter(groundY);
 
     // Rain, drawn last so it falls in front of Stefan rather than behind
     // him -- see drawRain()'s comment.
