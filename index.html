@@ -516,11 +516,47 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // to repeat back-to-back.
   const NO_REPEAT_IDLE_MOODS = ['idle_phone_south', 'idle_worn_out_south', 'idle_stretching_south', 'idle_lay_down_south'];
 
-  function pickIdleMood(prevMood) {
+  // Fatigue drift -- no new art, just a slow shift in the odds. The two
+  // moods that already read as tired (idle_worn_out_south's slumped
+  // tail-loop, idle_rubbing_eyes_south's rubbing gesture) get picked more
+  // and more often the longer the current session has run, so the mood
+  // pool itself gradually leans tired the way the art already does.
+  const TIRED_IDLE_MOODS = ['idle_worn_out_south', 'idle_rubbing_eyes_south'];
+  // elapsedSec (same real session clock update() computes for the HUD
+  // timer and the trip-roll cooldowns -- see elapsedSec in update()) needs
+  // this many seconds to ramp fatigue all the way up, at which point each
+  // tired mood is FATIGUE_MAX_WEIGHT times as likely to be picked as a
+  // non-tired one -- it holds there rather than climbing further. At
+  // elapsedSec 0 every mood is weighted equally, same odds as before this
+  // feature existed.
+  const FATIGUE_RAMP_SEC = 240; // 4 minutes
+  const FATIGUE_MAX_WEIGHT = 6;
+
+  // Generic weighted pick -- items: [{ value, weight }]. With every weight
+  // equal this reduces to exactly the same draw pickVariant() above makes
+  // (Math.random() * pool.length, floored) for the same single Math.random()
+  // call, so early in a session (fatigue ~0) mood selection reads
+  // identically to before fatigue drift existed.
+  function weightedPick(items) {
+    const total = items.reduce(function(sum, it) { return sum + it.weight; }, 0);
+    let r = Math.random() * total;
+    for (const it of items) {
+      if (r < it.weight) return it.value;
+      r -= it.weight;
+    }
+    return items[items.length - 1].value; // float-rounding guard
+  }
+
+  function pickIdleMood(prevMood, elapsedSec) {
     const pool = NO_REPEAT_IDLE_MOODS.indexOf(prevMood) !== -1
       ? IDLE_VARIANTS.filter(function(v) { return v !== prevMood; })
       : IDLE_VARIANTS;
-    return pickVariant(pool);
+    const fatigueT = Math.max(0, Math.min(1, (elapsedSec || 0) / FATIGUE_RAMP_SEC));
+    const tiredWeight = 1 + fatigueT * (FATIGUE_MAX_WEIGHT - 1);
+    const items = pool.map(function(mood) {
+      return { value: mood, weight: TIRED_IDLE_MOODS.indexOf(mood) !== -1 ? tiredWeight : 1 };
+    });
+    return weightedPick(items);
   }
 
   // Action-family checks, used throughout update()/animate() instead of
@@ -2125,7 +2161,7 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
       setAction('stand_south');
     } else {
       if (!IDLE_VARIANTS.includes(character.action)) {
-        character.idleMood = pickIdleMood(character.idleMood);
+        character.idleMood = pickIdleMood(character.idleMood, elapsedSec);
       }
       setAction(character.idleMood);
     }
