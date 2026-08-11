@@ -224,18 +224,26 @@
   .tc-dir-btn.tc-down-right .tc-dir { transform: rotate(135deg); }
   .tc-dir-btn.tc-down-left  .tc-dir { transform: rotate(225deg); }
   .tc-dir-btn.tc-up-left    .tc-dir { transform: rotate(315deg); }
-  /* Jump, Run, Punch, Kick: four identical circular buttons, side by
-     side, with spacing that scales with button size so they never feel
-     cramped enough to risk an accidental press. Each is a small stack --
-     the stroke ring stays at full opacity always, while the fill button
-     dims to 50% while pressed. */
+  /* Jump, Run, Punch, Kick: four identical circular buttons, arranged as
+     two stacked rows -- Punch/Kick on top, Jump/Run underneath -- rather
+     than a single row of four, so the attack buttons sit within easier
+     thumb reach above the movement buttons. Spacing scales with button
+     size so they never feel cramped enough to risk an accidental press.
+     Each is a small stack -- the stroke ring stays at full opacity
+     always, while the fill button dims to 50% while pressed. */
   .tc-actions {
     --action: clamp(44px, 9vmin, 72px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(var(--action) * 0.35);
+    pointer-events: auto;
+  }
+  .tc-actions-row {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: calc(var(--action) * 0.5);
-    pointer-events: auto;
   }
   .tc-action-btn {
     position: relative;
@@ -301,21 +309,25 @@
     <div class="tc-dir-btn tc-diag-btn tc-up-left" data-key="up left"><img class="tc-dir tc-diag" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTggMkwxNCAxNEgyTDggMloiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="up-left" draggable="false"></div>
   </div>
   <div class="tc-actions">
-    <div class="tc-action-btn" data-key="space">
-      <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
-      <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="jump" draggable="false">
+    <div class="tc-actions-row tc-actions-row-top">
+      <div class="tc-action-btn" data-key="punch">
+        <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
+        <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="punch" draggable="false">
+      </div>
+      <div class="tc-action-btn" data-key="kick">
+        <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
+        <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="kick" draggable="false">
+      </div>
     </div>
-    <div class="tc-action-btn" data-key="shift">
-      <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
-      <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="run" draggable="false">
-    </div>
-    <div class="tc-action-btn" data-key="punch">
-      <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
-      <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="punch" draggable="false">
-    </div>
-    <div class="tc-action-btn" data-key="kick">
-      <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
-      <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="kick" draggable="false">
+    <div class="tc-actions-row tc-actions-row-bottom">
+      <div class="tc-action-btn" data-key="space">
+        <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
+        <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="jump" draggable="false">
+      </div>
+      <div class="tc-action-btn" data-key="shift">
+        <img class="tc-btn-stroke" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTEiIHN0cm9rZT0iIzIxMjEyMSIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjwvc3ZnPgo=" alt="" draggable="false">
+        <img class="tc-btn-fill" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiMyMTIxMjEiLz4KPC9zdmc+Cg==" alt="run" draggable="false">
+      </div>
     </div>
   </div>
 </div>
