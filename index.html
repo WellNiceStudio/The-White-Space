@@ -1263,24 +1263,57 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   const RAIN_CHANCE_PER_SEC = 0.01; // ...then this independent chance every real second once eligible
   const RAIN_DURATION_SEC = 30;     // how long a rain session lasts once it starts, start to stop
 
-  const RAIN_DROP_COUNT = 40;  // concurrent streaks, spread across the full canvas width -- a flat constant now rather than something scaled off a single cloud's own on-screen size
   const RAIN_DROP_SPEED = 340; // px/sec falling -- brisker than the old cloud-fed rain since every drop now travels the full canvas height, not just a short segment underneath the cloud
   const RAIN_DROP_LENGTH = 11; // px, length of each drawn streak -- always straight down, no horizontal lean
   const RAIN_DROP_COLOR = 'rgba(120,145,165,0.55)'; // unchanged colour, originally sampled from the now-removed cloud art's own shaded-blue tone
 
+  // Density ramp -- a rain session no longer sits at one flat concurrent
+  // drop count the whole time. It starts comparatively light
+  // (RAIN_DROP_COUNT_MIN) and builds up smoothly over RAIN_RAMP_UP_SEC of
+  // real rain-time to a genuinely heavier downpour (RAIN_DROP_COUNT_MAX),
+  // then holds there for however much of RAIN_DURATION_SEC remains. See
+  // currentRainDropCount(), which turns rainTimer into "how many of the
+  // seeded drops are currently active" -- read by both updateRaindrops()
+  // and drawRain() below. The full RAIN_DROP_COUNT_MAX pool is seeded up
+  // front (see seedRaindrops()) so there's no re-seeding/array-resizing
+  // mid-session; drops beyond the current active count simply sit
+  // dormant (never advanced, never drawn) until the ramp reaches their
+  // index, at which point they just join in from wherever seedRaindrops()
+  // originally scattered them -- already spread across the full width and
+  // fall depth, same as every other drop, so a newly-active one never
+  // reads as popping in at a suspicious fixed spot.
+  const RAIN_DROP_COUNT_MIN = 16; // concurrent streaks the instant a session starts
+  const RAIN_DROP_COUNT_MAX = 60; // concurrent streaks once the ramp is fully built up -- genuinely denser than any previous flat rain rate this game has had
+  const RAIN_RAMP_UP_SEC = 15;    // real seconds of rain (rainTimer) to go from MIN to MAX -- half of RAIN_DURATION_SEC, so a typical session spends its back half at full intensity rather than only ever grazing it right at the end
+
+  // How many of the seeded raindrops are currently "live" (advanced by
+  // updateRaindrops(), drawn by drawRain()) -- a smooth ramp from
+  // RAIN_DROP_COUNT_MIN up to RAIN_DROP_COUNT_MAX over RAIN_RAMP_UP_SEC of
+  // rainTimer, holding at the max from there on for the rest of the
+  // session. rainTimer is already reset to 0 at the start of every fresh
+  // session (see updateRain()), so this naturally restarts light each
+  // time it rains again, rather than remembering how hard a previous
+  // session ended.
+  function currentRainDropCount() {
+    const t = Math.max(0, Math.min(1, rainTimer / RAIN_RAMP_UP_SEC));
+    return Math.round(RAIN_DROP_COUNT_MIN + (RAIN_DROP_COUNT_MAX - RAIN_DROP_COUNT_MIN) * t);
+  }
+
   // (Re)seeds the raindrops array the first time a rain session starts --
-  // each drop gets its own random x across the full canvas width and a
-  // random starting y anywhere between the top of the canvas and the
-  // ground line (not all pinned to y=0), so a freshly-started rain
-  // doesn't read as a single synchronized sheet dropping from the very
-  // top -- it looks like it's already mid-fall the instant it begins,
-  // same as the old cloud-fed version staggered its own drops' fall
-  // progress. Bounded by groundY (see updateRaindrops()), not
-  // canvas.height, so a drop is never seeded already past the ground.
+  // always the full RAIN_DROP_COUNT_MAX pool, regardless of how many are
+  // active yet (see currentRainDropCount()) -- each drop gets its own
+  // random x across the full canvas width and a random starting y
+  // anywhere between the top of the canvas and the ground line (not all
+  // pinned to y=0), so a freshly-started rain doesn't read as a single
+  // synchronized sheet dropping from the very top -- it looks like it's
+  // already mid-fall the instant it begins, same as the old cloud-fed
+  // version staggered its own drops' fall progress. Bounded by groundY
+  // (see updateRaindrops()), not canvas.height, so a drop is never seeded
+  // already past the ground.
   function seedRaindrops() {
     raindrops = [];
     const groundY = canvas.height * GROUND_Y_FRAC;
-    for (let i = 0; i < RAIN_DROP_COUNT; i++) {
+    for (let i = 0; i < RAIN_DROP_COUNT_MAX; i++) {
       raindrops.push({
         x: Math.random() * canvas.width,
         y: Math.random() * groundY
@@ -1288,18 +1321,23 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
     }
   }
 
-  // Each drop falls straight down from wherever it currently is, and
-  // loops back to a fresh random x right at the top (y=0) once it
-  // reaches the ground line -- the same GROUND_Y_FRAC line Stefan
-  // himself stands on (see GROUND_Y_FRAC/drawGroundShadow() above),
-  // rather than running all the way off the bottom of the screen. No
-  // more tether to a cloud's position or a short fixed fall distance,
-  // it just rains across the whole screen width down to ground level
-  // for as long as raining stays true.
+  // Each currently-active drop (see currentRainDropCount()) falls straight
+  // down from wherever it currently is, and loops back to a fresh random x
+  // right at the top (y=0) once it reaches the ground line -- the same
+  // GROUND_Y_FRAC line Stefan himself stands on (see
+  // GROUND_Y_FRAC/drawGroundShadow() above), rather than running all the
+  // way off the bottom of the screen. No more tether to a cloud's position
+  // or a short fixed fall distance, it just rains across the whole screen
+  // width down to ground level for as long as raining stays true. Drops
+  // beyond the active count are left untouched here -- they simply don't
+  // move (and drawRain() won't draw them either) until the ramp reaches
+  // them.
   function updateRaindrops(dt) {
     if (raindrops.length === 0) seedRaindrops();
     const groundY = canvas.height * GROUND_Y_FRAC;
-    for (const drop of raindrops) {
+    const activeCount = currentRainDropCount();
+    for (let i = 0; i < activeCount; i++) {
+      const drop = raindrops[i];
       drop.y += RAIN_DROP_SPEED * dt;
       // while, not if -- an unusually large dt (a slow frame, or a test
       // driving update() with a big single step) could otherwise cross
@@ -2620,10 +2658,12 @@ const SPRITES_RAW = {"crouching_east":[0,1,2,3,4],"door_open":[211,212,213,214,2
   // now), so render() can call it unconditionally.
   function drawRain() {
     if (raindrops.length === 0) return;
+    const activeCount = currentRainDropCount(); // see the density-ramp comment block above -- only draw the drops the ramp has actually activated so far
     ctx.save();
     ctx.strokeStyle = RAIN_DROP_COLOR;
     ctx.lineWidth = 2;
-    for (const drop of raindrops) {
+    for (let i = 0; i < activeCount; i++) {
+      const drop = raindrops[i];
       ctx.beginPath();
       ctx.moveTo(drop.x, drop.y);
       ctx.lineTo(drop.x, drop.y + RAIN_DROP_LENGTH);
